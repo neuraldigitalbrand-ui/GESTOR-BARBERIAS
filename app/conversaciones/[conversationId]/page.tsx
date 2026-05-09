@@ -1,11 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
-import { MessageList } from "@/components/conversaciones/message-list";
-import { PlatformIcon, platformLabel } from "@/components/platform-icon";
+import { ChatView } from "@/components/conversaciones/chat-view";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { notFound } from "next/navigation";
-import { Input } from "@/components/ui/input";
+import type { Conversation, Platform, Message } from "@/lib/types";
+import { format, isToday, isYesterday } from "date-fns";
+
+function msgDate(iso: string): string {
+  const d = new Date(iso);
+  if (isToday(d)) return "today";
+  if (isYesterday(d)) return "yesterday";
+  return format(d, "dd/MM/yyyy");
+}
 
 export default async function ConversationPage({
   params,
@@ -17,7 +24,7 @@ export default async function ConversationPage({
 
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, platform, leads(name)")
+    .select("id, platform, leads(name, phone)")
     .eq("id", conversationId)
     .maybeSingle();
 
@@ -29,46 +36,40 @@ export default async function ConversationPage({
     .eq("conversation_id", conversationId)
     .order("sent_at", { ascending: true });
 
-  const leadName = Array.isArray(conv.leads)
-    ? (conv.leads[0]?.name ?? "Cliente")
-    : (conv.leads?.name ?? "Cliente");
+  const lead = Array.isArray(conv.leads) ? conv.leads[0] : conv.leads;
+  const leadName = lead?.name ?? "Cliente";
+  const leadHandle = lead?.phone ?? `#${conv.id.slice(0, 6)}`;
 
-  const messages = (msgs ?? []).map((m) => ({
-    id: m.id,
-    sender: m.sender,
-    content: m.content,
-    sent_at: m.sent_at,
+  const messages: Message[] = (msgs ?? []).map((m) => ({
+    from: m.sender === "agent" ? "agent" : "lead",
+    text: m.content,
+    time: format(new Date(m.sent_at), "HH:mm"),
+    date: msgDate(m.sent_at),
   }));
 
+  const conversation: Conversation = {
+    id: conv.id,
+    name: leadName,
+    platform: conv.platform as Platform,
+    handle: leadHandle,
+    unread: 0,
+    time: "",
+    preview: "",
+    messages,
+  };
+
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col">
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b px-4 py-3">
-        <Link
-          href="/conversaciones"
-          className={buttonVariants({ variant: "ghost", size: "icon" })}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <div className="flex flex-1 items-center gap-2">
-          <span className="font-semibold">{leadName}</span>
-          <PlatformIcon platform={conv.platform} size={16} />
-          <span className="text-sm text-muted-foreground">{platformLabel(conv.platform)}</span>
-        </div>
+    <div className="flex flex-col h-[calc(100vh-80px)]">
+      <div className="shrink-0 px-4 py-3 border-b border-white/[0.06]">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/conversaciones">
+            <ArrowLeft className="w-4 h-4" />
+            Volver
+          </Link>
+        </Button>
       </div>
-
-      {/* Messages */}
-      <MessageList messages={messages} />
-
-      {/* Footer — read-only input */}
-      <div className="shrink-0 border-t px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Input
-            disabled
-            placeholder="Las respuestas las maneja el agente IA"
-            className="flex-1 cursor-not-allowed"
-          />
-        </div>
+      <div className="flex-1 min-h-0">
+        <ChatView conversation={conversation} />
       </div>
     </div>
   );

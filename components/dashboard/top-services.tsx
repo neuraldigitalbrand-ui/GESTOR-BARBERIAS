@@ -1,5 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TopServicesProps {
   services: { name: string; count: number }[];
@@ -7,34 +7,41 @@ interface TopServicesProps {
 
 export function TopServices({ services }: TopServicesProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          Top servicios (último mes)
-        </CardTitle>
-        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        {services.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin datos</p>
-        ) : (
-          <ol className="space-y-2">
-            {services.map((s, i) => (
-              <li key={s.name} className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="w-5 text-right font-mono text-muted-foreground">
-                    {i + 1}.
-                  </span>
-                  <span className="font-medium">{s.name}</span>
+    <div className="bg-surface rounded-xl border border-white/[0.06] p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-text-2">
+          <TrendingUp className="w-4 h-4" />
+          <span className="text-xs uppercase tracking-[0.14em]">Top servicios</span>
+        </div>
+        <span className="text-[10px] text-text-3">Último mes</span>
+      </div>
+      {services.length === 0 ? (
+        <p className="text-sm text-text-3">Sin datos</p>
+      ) : (
+        <ul>
+          {services.map((s, i) => (
+            <li
+              key={s.name}
+              className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-text-3 font-mono text-xs w-4">
+                  #{i + 1}
                 </span>
-                <span className="text-muted-foreground">
-                  {s.count} {s.count === 1 ? "turno" : "turnos"}
+                <span
+                  className={cn(
+                    "text-sm",
+                    i === 0 ? "text-brand font-medium" : "text-text-1"
+                  )}
+                >
+                  {s.name}
                 </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </CardContent>
-    </Card>
+              </div>
+              <span className="text-xs text-text-2">{s.count} turnos</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -1,0 +1,72 @@
+"use client";
+
+import { Bot, Lock, MoreHorizontal, Phone } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
+import { PlatformIcon, platformLabel } from "@/components/shared/platform-icon";
+import { MessageBubble } from "@/components/conversaciones/message-bubble";
+import type { Conversation } from "@/lib/types";
+
+export function ChatView({ conversation }: { conversation: Conversation }) {
+  const groups = conversation.messages.reduce<Record<string, typeof conversation.messages>>(
+    (acc, m) => {
+      (acc[m.date] = acc[m.date] || []).push(m);
+      return acc;
+    },
+    {}
+  );
+
+  const dateLabel = (k: string) =>
+    k === "today" ? "Hoy" : k === "yesterday" ? "Ayer" : k;
+
+  return (
+    <div className="flex flex-col h-full bg-bg">
+      {/* Header */}
+      <div className="h-[60px] border-b border-white/[0.06] px-5 flex items-center gap-3 bg-surface/30 backdrop-blur-sm shrink-0">
+        <Avatar name={conversation.name} size="sm" />
+        <div className="leading-tight">
+          <div className="text-sm font-semibold text-text-1">{conversation.name}</div>
+          <div className="text-[11px] text-text-2 flex items-center gap-1.5 mt-0.5">
+            <PlatformIcon platform={conversation.platform} size={10} />
+            {platformLabel(conversation.platform)} · {conversation.handle}
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <button className="w-8 h-8 rounded-lg hover:bg-surface-raised text-text-2 hover:text-text-1 flex items-center justify-center transition-colors">
+            <Phone className="w-4 h-4" />
+          </button>
+          <button className="w-8 h-8 rounded-lg hover:bg-surface-raised text-text-2 hover:text-text-1 flex items-center justify-center transition-colors">
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 scrollbar-none">
+        {Object.entries(groups).map(([date, msgs]) => (
+          <div key={date} className="space-y-3">
+            <div className="text-[11px] text-text-3 text-center py-2 uppercase tracking-wider">
+              {dateLabel(date)}
+            </div>
+            {msgs.map((m, i) => (
+              <MessageBubble key={i} message={m} />
+            ))}
+          </div>
+        ))}
+        {conversation.messages.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-text-3">Sin mensajes</p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="h-[64px] border-t border-white/[0.06] px-5 flex items-center gap-3 bg-surface/30 backdrop-blur-sm shrink-0">
+        <Bot className="w-4 h-4 text-brand shrink-0" />
+        <div className="flex-1 h-9 rounded-lg bg-bg border border-white/[0.06] px-3 flex items-center text-sm text-text-3 italic select-none">
+          El agente responde automáticamente
+        </div>
+        <Lock className="w-3.5 h-3.5 text-text-3 shrink-0" />
+      </div>
+    </div>
+  );
+}

@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { PromptEditor } from "@/components/agente/prompt-editor";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, FileCode2 } from "lucide-react";
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 
 export default async function AgentPromptPage() {
   const supabase = await createClient();
@@ -18,18 +19,19 @@ export default async function AgentPromptPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/agente" className={buttonVariants({ variant: "ghost", size: "icon" })}>
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">Prompt del sistema</h1>
-          <p className="text-sm text-muted-foreground">
-            Instrucciones base que definen el comportamiento del agente.
-          </p>
-        </div>
-      </div>
-
+      <PageHeader
+        icon={<FileCode2 className="w-5 h-5" />}
+        title="Prompt del sistema"
+        subtitle="Instrucciones base que definen el comportamiento del agente"
+        right={
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/agente">
+              <ArrowLeft className="w-4 h-4" />
+              Volver al agente
+            </Link>
+          </Button>
+        }
+      />
       <PromptEditor initialPrompt={initialPrompt} updatedAt={updatedAt} />
     </div>
   );

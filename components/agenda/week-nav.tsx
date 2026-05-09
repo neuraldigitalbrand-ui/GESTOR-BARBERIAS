@@ -19,11 +19,11 @@ export function WeekNav({ weekOffset, weekLabel }: WeekNavProps) {
   };
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <Button variant="outline" size="icon" onClick={() => go(-1)}>
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <span className="min-w-[200px] text-center text-sm font-medium capitalize">
+      <span className="min-w-[180px] text-center text-sm font-medium capitalize text-text-1">
         {weekLabel}
       </span>
       <Button variant="outline" size="icon" onClick={() => go(1)}>

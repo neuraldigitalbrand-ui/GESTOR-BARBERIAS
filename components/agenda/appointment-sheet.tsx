@@ -1,208 +1,151 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { PlatformIcon, platformLabel } from "@/components/platform-icon";
+import { useEffect } from "react";
+import { X, Phone, Mail, Clock, CalendarDays, MessageSquare } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { PlatformIcon, platformLabel } from "@/components/shared/platform-icon";
+import { formatPriceUYU } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
+import type { AgendaAppointment } from "@/lib/types";
 
-interface HistoryItem {
-  id: string;
-  start_at: string;
-  end_at: string;
-  status: string;
-  service_name: string;
+interface AppointmentSheetProps {
+  appointment: AgendaAppointment;
+  onClose: () => void;
 }
 
-export interface AppointmentDetail {
-  id: string;
-  start_at: string;
-  end_at: string;
-  status: string;
-  notes: string | null;
-  lead: {
-    id: string;
-    name: string;
-    phone: string | null;
-    email: string | null;
-    source_platform: string | null;
-  };
-  service: {
-    name: string;
-    duration_minutes: number;
-    price: number;
-  };
-  history: HistoryItem[];
-  conversation_id: string | null;
-}
+export function AppointmentSheet({ appointment: a, onClose }: AppointmentSheetProps) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-const STATUS_LABEL: Record<string, string> = {
-  confirmed: "Confirmado",
-  completed: "Completado",
-  cancelled: "Cancelado",
-  pending: "Pendiente",
-};
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  confirmed: "default",
-  completed: "secondary",
-  cancelled: "destructive",
-  pending: "outline",
-};
-
-interface AppointmentCardProps {
-  appointment: AppointmentDetail;
-}
-
-export function AppointmentCard({ appointment }: AppointmentCardProps) {
-  const [open, setOpen] = useState(false);
-  const start = new Date(appointment.start_at);
-  const end = new Date(appointment.end_at);
+  const start = new Date(a.startAt);
+  const dateLabel = format(start, "EEE d MMM", { locale: es });
 
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full rounded-md border bg-background p-2 text-left text-xs transition-colors hover:bg-muted/60"
-      >
-        <p className="font-medium leading-tight">{appointment.lead.name}</p>
-        <p className="text-muted-foreground">
-          {format(start, "HH:mm")}–{format(end, "HH:mm")}
-        </p>
-        <p className="truncate text-muted-foreground">{appointment.service.name}</p>
-      </button>
-
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{appointment.lead.name}</SheetTitle>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-6">
-            {/* Lead info */}
-            <section className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Cliente
-              </h3>
-              <div className="space-y-1 text-sm">
-                {appointment.lead.phone && (
-                  <p>
-                    <span className="text-muted-foreground">Teléfono: </span>
-                    {appointment.lead.phone}
-                  </p>
-                )}
-                {appointment.lead.email && (
-                  <p>
-                    <span className="text-muted-foreground">Email: </span>
-                    {appointment.lead.email}
-                  </p>
-                )}
-                {appointment.lead.source_platform && (
-                  <p className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Plataforma: </span>
-                    <PlatformIcon platform={appointment.lead.source_platform} size={14} />
-                    {platformLabel(appointment.lead.source_platform)}
-                  </p>
-                )}
-              </div>
-            </section>
-
-            {/* Appointment info */}
-            <section className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Turno
-              </h3>
-              <div className="space-y-1 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Servicio: </span>
-                  {appointment.service.name}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Fecha: </span>
-                  <span className="capitalize">
-                    {format(start, "EEEE d 'de' MMMM", { locale: es })}
-                  </span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Horario: </span>
-                  {format(start, "HH:mm")}–{format(end, "HH:mm")}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Duración: </span>
-                  {appointment.service.duration_minutes} min
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Precio: </span>
-                  ${Number(appointment.service.price).toLocaleString("es-UY")}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Estado: </span>
-                  <Badge variant={STATUS_VARIANT[appointment.status] ?? "secondary"}>
-                    {STATUS_LABEL[appointment.status] ?? appointment.status}
-                  </Badge>
-                </div>
-                {appointment.notes && (
-                  <p>
-                    <span className="text-muted-foreground">Notas: </span>
-                    {appointment.notes}
-                  </p>
-                )}
-              </div>
-            </section>
-
-            {/* Conversation link */}
-            {appointment.conversation_id && (
-              <Link
-                href={`/conversaciones/${appointment.conversation_id}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                Ver conversación
-              </Link>
-            )}
-
-            {/* History */}
-            {appointment.history.length > 0 && (
-              <section className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Historial ({appointment.history.length})
-                </h3>
-                <div className="space-y-1">
-                  {appointment.history.map((h) => (
-                    <div
-                      key={h.id}
-                      className="flex items-center justify-between rounded-md border px-3 py-2 text-xs"
-                    >
-                      <span>
-                        <span className="capitalize">
-                          {format(new Date(h.start_at), "d MMM yyyy", { locale: es })}
-                        </span>
-                        {" · "}
-                        {h.service_name}
-                      </span>
-                      <Badge
-                        variant={STATUS_VARIANT[h.status] ?? "secondary"}
-                        className="ml-2 text-[0.65rem]"
-                      >
-                        {STATUS_LABEL[h.status] ?? h.status}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+      />
+      <div className="relative w-full max-w-[440px] h-full bg-surface border-l border-white/[0.06] shadow-elevated overflow-y-auto animate-slide-in-right">
+        {/* Header */}
+        <div className="px-6 pt-6 pb-5 border-b border-white/[0.06]">
+          <div className="flex items-start justify-between mb-4">
+            <Avatar name={a.name} size="lg" />
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg hover:bg-surface-raised text-text-2 flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-        </SheetContent>
-      </Sheet>
-    </>
+          <h2 className="text-xl font-bold text-text-1">{a.name}</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <StatusBadge status={a.status} />
+            <span className="text-sm text-text-2">· {a.service}</span>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-7">
+          {/* Cliente */}
+          <section>
+            <div className="text-[11px] uppercase tracking-wider text-text-3 mb-3">
+              Cliente
+            </div>
+            <div className="grid grid-cols-1 gap-2.5">
+              <InfoRow
+                icon={<Phone className="w-3.5 h-3.5" />}
+                label="Teléfono"
+                value={a.phone ?? "—"}
+              />
+              <InfoRow
+                icon={<Mail className="w-3.5 h-3.5" />}
+                label="Email"
+                value={a.email ?? "—"}
+              />
+              <InfoRow
+                icon={<PlatformIcon platform={a.platform} size={14} />}
+                label="Plataforma"
+                value={platformLabel(a.platform)}
+              />
+            </div>
+          </section>
+
+          {/* Turno */}
+          <section>
+            <div className="text-[11px] uppercase tracking-wider text-text-3 mb-3">
+              Turno actual
+            </div>
+            <div className="bg-bg rounded-xl border border-white/[0.06] p-4 space-y-3">
+              <div className="text-base font-semibold text-text-1">{a.service}</div>
+              <div className="flex items-center gap-3 text-sm text-text-2">
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  <span className="capitalize">{dateLabel}</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  {a.time}
+                </span>
+              </div>
+              <div className="flex items-end justify-between pt-2 border-t border-white/[0.06]">
+                <div>
+                  <div className="text-2xl font-bold font-mono text-brand">
+                    {formatPriceUYU(a.price)}
+                  </div>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-surface-raised border border-white/[0.06] text-[10px] text-text-2">
+                    {a.duration} min
+                  </span>
+                </div>
+                <Button variant="outline" size="sm">
+                  <MessageSquare className="w-3.5 h-3.5" /> Conversación
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          {/* Acciones */}
+          <section className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm">
+              Reprogramar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive border-destructive/20 hover:bg-destructive/5"
+            >
+              Cancelar turno
+            </Button>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-bg border border-white/[0.04]">
+      <span className="text-text-3">{icon}</span>
+      <div className="flex-1 flex items-center justify-between gap-3">
+        <span className="text-xs text-text-2">{label}</span>
+        <span className="text-xs text-text-1 font-medium truncate">{value}</span>
+      </div>
+    </div>
   );
 }

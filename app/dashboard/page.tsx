@@ -1,35 +1,30 @@
 import { createClient } from "@/lib/supabase/server";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { TopServices } from "@/components/dashboard/top-services";
-import { NextAppointment } from "@/components/dashboard/next-appointment";
+import { NextAppointmentCard } from "@/components/dashboard/next-appointment";
+import { RevenueCard } from "@/components/dashboard/revenue-card";
+import { PageHeader } from "@/components/shared/page-header";
 import {
   CalendarCheck,
   CalendarDays,
   MessageSquare,
   Inbox,
-  DollarSign,
+  LayoutDashboard,
 } from "lucide-react";
-import { startOfWeek } from "date-fns";
-import { format } from "date-fns";
+import { startOfWeek, addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
-
-function formatCurrency(amount: number): string {
-  return `$${Math.round(amount).toLocaleString("es-UY")}`;
-}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
   const now = new Date();
 
-  // Date ranges
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
   const monday = startOfWeek(now, { weekStartsOn: 1 });
-  const saturday = new Date(monday);
-  saturday.setDate(monday.getDate() + 5);
+  const saturday = addDays(monday, 5);
   saturday.setHours(23, 59, 59, 999);
 
   const sevenDaysAgo = new Date(now);
@@ -48,50 +43,35 @@ export default async function DashboardPage() {
     topAptsResult,
     nextAptResult,
   ] = await Promise.all([
-    // 1. Turnos de hoy (confirmed)
     supabase
       .from("appointments")
       .select("*", { count: "exact", head: true })
       .eq("status", "confirmed")
       .gte("start_at", todayStart.toISOString())
       .lte("start_at", todayEnd.toISOString()),
-
-    // 2. Turnos de la semana (confirmed + completed, Mon–Sat)
     supabase
       .from("appointments")
       .select("*", { count: "exact", head: true })
       .in("status", ["confirmed", "completed"])
       .gte("start_at", monday.toISOString())
       .lte("start_at", saturday.toISOString()),
-
-    // 3. Conversaciones activas (last 7 days)
     supabase
       .from("conversations")
       .select("*", { count: "exact", head: true })
       .gte("last_message_at", sevenDaysAgo.toISOString()),
-
-    // 4. Mensajes sin leer (sum unread_count)
     supabase.from("conversations").select("unread_count"),
-
-    // 5. Appointments this week for revenue calculation
     supabase
       .from("appointments")
-      .select("service_id")
+      .select("service_id, start_at")
       .in("status", ["confirmed", "completed"])
       .gte("start_at", monday.toISOString())
       .lte("start_at", saturday.toISOString()),
-
-    // 6. All services (price + name lookup table)
-    supabase.from("services").select("id, name, price"),
-
-    // 7. Completed appointments last month (for top services)
+    supabase.from("services").select("id, name, price, duration_minutes"),
     supabase
       .from("appointments")
       .select("service_id")
       .eq("status", "completed")
       .gte("start_at", oneMonthAgo.toISOString()),
-
-    // 8. Next upcoming confirmed appointment
     supabase
       .from("appointments")
       .select("id, start_at, end_at, lead_id, service_id")
@@ -102,12 +82,11 @@ export default async function DashboardPage() {
       .maybeSingle(),
   ]);
 
-  // --- Process metrics ---
   const todayCount = todayResult.count ?? 0;
   const weekCount = weekCountResult.count ?? 0;
   const activeConvs = activeConvsResult.count ?? 0;
   const unreadTotal = (unreadResult.data ?? []).reduce(
-    (acc, c) => acc + c.unread_count,
+    (acc, c) => acc + (c.unread_count ?? 0),
     0
   );
 
@@ -119,27 +98,44 @@ export default async function DashboardPage() {
     return acc + Number(serviceMap.get(apt.service_id)?.price ?? 0);
   }, 0);
 
-  // Top 3 services by appointment count
+  // Build daily revenue bars (Mon–Sat)
+  const todayStr = format(now, "yyyy-MM-dd");
+  const maxDayRevenue = Math.max(
+    ...Array.from({ length: 6 }, (_, i) => {
+      const dateStr = format(addDays(monday, i), "yyyy-MM-dd");
+      return (weekAptsResult.data ?? [])
+        .filter((a) => a.start_at.startsWith(dateStr))
+        .reduce((acc, a) => acc + Number(serviceMap.get(a.service_id)?.price ?? 0), 0);
+    }),
+    1
+  );
+  const weekBars = Array.from({ length: 6 }, (_, i) => {
+    const day = addDays(monday, i);
+    const dateStr = format(day, "yyyy-MM-dd");
+    const dayRevenue = (weekAptsResult.data ?? [])
+      .filter((a) => a.start_at.startsWith(dateStr))
+      .reduce((acc, a) => acc + Number(serviceMap.get(a.service_id)?.price ?? 0), 0);
+    return {
+      d: format(day, "EEE", { locale: es }),
+      v: dayRevenue / maxDayRevenue,
+      today: dateStr === todayStr,
+      future: day > now,
+    };
+  });
+
+  // Top 3 services
   const serviceCounts = new Map<string, number>();
   for (const apt of topAptsResult.data ?? []) {
     serviceCounts.set(apt.service_id, (serviceCounts.get(apt.service_id) ?? 0) + 1);
   }
   const topServices = Array.from(serviceCounts.entries())
-    .map(([id, count]) => ({
-      name: serviceMap.get(id)?.name ?? "Desconocido",
-      count,
-    }))
+    .map(([id, count]) => ({ name: serviceMap.get(id)?.name ?? "Desconocido", count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 3);
 
-  // Next appointment with lead name
+  // Next appointment
   const nextAptRaw = nextAptResult.data;
-  let nextAppointment: {
-    leadName: string;
-    serviceName: string;
-    startAt: string;
-    endAt: string;
-  } | null = null;
+  let nextAppointment: { leadName: string; serviceName: string; durationMinutes: number; startAt: string; endAt: string } | null = null;
 
   if (nextAptRaw) {
     const { data: lead } = await supabase
@@ -148,75 +144,72 @@ export default async function DashboardPage() {
       .eq("id", nextAptRaw.lead_id)
       .maybeSingle();
 
+    const svc = serviceMap.get(nextAptRaw.service_id);
     nextAppointment = {
       leadName: lead?.name ?? "Cliente",
-      serviceName: serviceMap.get(nextAptRaw.service_id)?.name ?? "Servicio",
+      serviceName: svc?.name ?? "Servicio",
+      durationMinutes: svc?.duration_minutes ?? 30,
       startAt: nextAptRaw.start_at,
       endAt: nextAptRaw.end_at,
     };
   }
 
+  const dateSubtitle = format(now, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-sm capitalize text-muted-foreground">
-          {format(now, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
-        </p>
-      </div>
+      <PageHeader
+        icon={<LayoutDashboard className="w-5 h-5" />}
+        title="Dashboard"
+        subtitle={dateSubtitle}
+      />
 
-      {/* 5 metric cards — 4-col grid, responsive */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          title="Turnos de hoy"
+          label="Turnos de hoy"
           value={todayCount}
           description="Confirmados"
-          icon={CalendarCheck}
+          icon={<CalendarCheck className="w-4 h-4" />}
         />
         <MetricCard
-          title="Turnos de la semana"
+          label="Turnos esta semana"
           value={weekCount}
           description="Lunes a sábado"
-          icon={CalendarDays}
+          icon={<CalendarDays className="w-4 h-4" />}
         />
         <MetricCard
-          title="Conversaciones activas"
+          label="Conversaciones activas"
           value={activeConvs}
           description="Últimos 7 días"
-          icon={MessageSquare}
+          icon={<MessageSquare className="w-4 h-4" />}
         />
         <MetricCard
-          title="Mensajes sin leer"
+          label="Sin leer"
           value={unreadTotal}
           description="Todas las plataformas"
-          icon={Inbox}
-        />
-        <MetricCard
-          title="Ingresos estimados"
-          value={formatCurrency(weekRevenue)}
-          description="Esta semana"
-          icon={DollarSign}
+          icon={<Inbox className="w-4 h-4" />}
+          warning={unreadTotal > 0}
         />
       </div>
 
-      {/* Bottom row: top services + next appointment */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <TopServices services={topServices} />
-        {nextAppointment ? (
-          <NextAppointment
-            leadName={nextAppointment.leadName}
-            serviceName={nextAppointment.serviceName}
-            startAt={nextAppointment.startAt}
-            endAt={nextAppointment.endAt}
-          />
-        ) : (
-          <div className="flex items-center justify-center rounded-lg border border-dashed p-8">
-            <p className="text-sm text-muted-foreground">
-              No hay turnos próximos confirmados
-            </p>
-          </div>
-        )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RevenueCard revenue={weekRevenue} weekBars={weekBars} />
+        <div className="grid gap-4">
+          <TopServices services={topServices} />
+          {nextAppointment ? (
+            <NextAppointmentCard
+              leadName={nextAppointment.leadName}
+              serviceName={nextAppointment.serviceName}
+              durationMinutes={nextAppointment.durationMinutes}
+              startAt={nextAppointment.startAt}
+              endAt={nextAppointment.endAt}
+            />
+          ) : (
+            <div className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.08] p-6">
+              <p className="text-sm text-text-3">No hay turnos próximos</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

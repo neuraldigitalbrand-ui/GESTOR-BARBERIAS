@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PlatformIcon, platformLabel } from "@/components/platform-icon";
+import { PlatformIcon, platformLabel } from "@/components/shared/platform-icon";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -32,7 +32,7 @@ export function ConversationList({ conversations, activePlatform }: Conversation
       <div className="flex items-center justify-center rounded-lg border border-dashed p-12">
         <p className="text-sm text-muted-foreground">
           {activePlatform
-            ? `No hay conversaciones de ${platformLabel(activePlatform)}`
+            ? `No hay conversaciones de ${platformLabel(activePlatform as Parameters<typeof platformLabel>[0])}`
             : "No hay conversaciones aún"}
         </p>
       </div>
@@ -69,7 +69,7 @@ export function ConversationList({ conversations, activePlatform }: Conversation
                   {conv.last_message ?? "Sin mensajes"}
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <PlatformIcon platform={conv.platform} size={14} />
+                  <PlatformIcon platform={conv.platform as Parameters<typeof PlatformIcon>[0]["platform"]} size={14} />
                   {conv.unread_count > 0 && (
                     <Badge className="h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs">
                       {conv.unread_count}

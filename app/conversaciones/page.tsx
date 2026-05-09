@@ -1,36 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
-import { ConversationList } from "@/components/conversaciones/conversation-list";
-import { PlatformIcon, platformLabel, ALL_PLATFORMS } from "@/components/platform-icon";
+import { PageHeader } from "@/components/shared/page-header";
 import { MessageSquare } from "lucide-react";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { ConversacionesClient } from "./conversaciones-client";
+import type { Conversation, Platform } from "@/lib/types";
+import { format, isToday, isYesterday } from "date-fns";
+import { es } from "date-fns/locale";
 
-interface SearchParams {
-  platform?: string;
+function timeLabel(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isToday(d)) return format(d, "HH:mm");
+  if (isYesterday(d)) return "Ayer";
+  return format(d, "d MMM", { locale: es });
 }
 
-export default async function ConversacionesPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
-  const { platform } = await searchParams;
-  const activePlatform = platform ?? null;
-
+export default async function ConversacionesPage() {
   const supabase = await createClient();
 
-  let query = supabase
+  const { data: convs } = await supabase
     .from("conversations")
-    .select("id, platform, last_message_at, unread_count, leads(name)")
+    .select("id, platform, last_message_at, unread_count, leads(name, phone)")
     .order("last_message_at", { ascending: false });
 
-  if (activePlatform) {
-    query = query.eq("platform", activePlatform);
-  }
-
-  const { data: convs } = await query;
-
-  // Fetch last message per conversation
   const conversationIds = (convs ?? []).map((c) => c.id);
   const lastMessages: Record<string, string> = {};
 
@@ -48,62 +39,28 @@ export default async function ConversacionesPage({
     }
   }
 
-  const conversations = (convs ?? []).map((c) => ({
-    id: c.id,
-    platform: c.platform,
-    last_message_at: c.last_message_at,
-    unread_count: c.unread_count,
-    leads: Array.isArray(c.leads) ? c.leads[0] ?? null : c.leads,
-    last_message: lastMessages[c.id] ?? null,
-  }));
+  const conversations: Conversation[] = (convs ?? []).map((c) => {
+    const lead = Array.isArray(c.leads) ? c.leads[0] : c.leads;
+    return {
+      id: c.id,
+      name: lead?.name ?? "Cliente",
+      platform: c.platform as Platform,
+      handle: lead?.phone ?? `#${c.id.slice(0, 6)}`,
+      unread: c.unread_count ?? 0,
+      time: timeLabel(c.last_message_at),
+      preview: lastMessages[c.id] ?? "Sin mensajes",
+      messages: [],
+    };
+  });
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <MessageSquare className="h-6 w-6 text-muted-foreground" />
-        <div>
-          <h1 className="text-2xl font-bold">Conversaciones</h1>
-          <p className="text-sm text-muted-foreground">
-            {conversations.length}{" "}
-            {conversations.length === 1 ? "conversación" : "conversaciones"}
-            {activePlatform ? ` en ${platformLabel(activePlatform)}` : " en total"}
-          </p>
-        </div>
-      </div>
-
-      {/* Platform filter chips */}
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href="/conversaciones"
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
-            !activePlatform
-              ? "border-foreground bg-foreground text-background"
-              : "border-border hover:bg-muted"
-          )}
-        >
-          Todas
-        </Link>
-        {ALL_PLATFORMS.map((p) => (
-          <Link
-            key={p}
-            href={`/conversaciones?platform=${p}`}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
-              activePlatform === p
-                ? "border-foreground bg-foreground text-background"
-                : "border-border hover:bg-muted"
-            )}
-          >
-            <PlatformIcon platform={p} size={14} />
-            {platformLabel(p)}
-          </Link>
-        ))}
-      </div>
-
-      {/* List */}
-      <ConversationList conversations={conversations} activePlatform={activePlatform} />
+      <PageHeader
+        icon={<MessageSquare className="w-5 h-5" />}
+        title="Conversaciones"
+        subtitle={`${conversations.length} ${conversations.length === 1 ? "conversación" : "conversaciones"}`}
+      />
+      <ConversacionesClient conversations={conversations} />
     </div>
   );
 }

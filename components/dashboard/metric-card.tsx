@@ -1,28 +1,54 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
-  title: string;
+  label: string;
   value: string | number;
-  description?: string;
-  icon?: LucideIcon;
+  description: string;
+  icon: React.ReactNode;
+  highlight?: boolean;
+  warning?: boolean;
 }
 
-export function MetricCard({ title, value, description, icon: Icon }: MetricCardProps) {
+export function MetricCard({
+  label,
+  value,
+  description,
+  icon,
+  highlight,
+  warning,
+}: MetricCardProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && (
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+    <div
+      className={cn(
+        "bg-surface rounded-xl p-6 border transition-all duration-200 group",
+        highlight
+          ? "border-brand/20 shadow-gold-glow hover:border-brand/30"
+          : "border-white/[0.06] hover:border-white/[0.10] hover:shadow-card-hover"
+      )}
+    >
+      <div className="flex items-start justify-between">
+        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-text-2">
+          {label}
+        </span>
+        <span
+          className={cn(
+            highlight
+              ? "text-brand"
+              : "text-text-3 group-hover:text-text-2 transition-colors"
+          )}
+        >
+          {icon}
+        </span>
+      </div>
+      <div
+        className={cn(
+          "text-3xl font-bold font-mono mt-3 tracking-tight",
+          highlight ? "text-brand" : warning ? "text-warning" : "text-text-1"
         )}
-      </CardContent>
-    </Card>
+      >
+        {value}
+      </div>
+      <div className="text-xs text-text-3 mt-1">{description}</div>
+    </div>
   );
 }
