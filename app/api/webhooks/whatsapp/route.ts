@@ -55,16 +55,27 @@ async function generateAIReply(
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
 
-  const client = new Anthropic({ apiKey })
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
-    system: systemPrompt,
-    messages: history,
-  })
+  // Filtrar mensajes vacíos y asegurar que empiece con "user"
+  const clean = history.filter((m) => m.content && m.content.trim().length > 0)
+  const firstUser = clean.findIndex((m) => m.role === 'user')
+  const messages = firstUser >= 0 ? clean.slice(firstUser) : clean
+  if (messages.length === 0) return null
 
-  const block = response.content[0]
-  return block.type === 'text' ? block.text : null
+  const client = new Anthropic({ apiKey })
+  try {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      system: systemPrompt,
+      messages,
+    })
+    const block = response.content[0]
+    return block.type === 'text' ? block.text : null
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string }
+    console.error('[AI] Anthropic error:', e.status, e.message)
+    return null
+  }
 }
 
 // POST — Meta envía los mensajes entrantes
