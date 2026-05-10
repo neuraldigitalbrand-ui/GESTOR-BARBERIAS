@@ -1,13 +1,66 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Bot, Lock, MoreHorizontal, Phone } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { PlatformIcon, platformLabel } from "@/components/shared/platform-icon";
 import { MessageBubble } from "@/components/conversaciones/message-bubble";
-import type { Conversation } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import type { Conversation, Message } from "@/lib/types";
+import { format, isToday, isYesterday } from "date-fns";
+
+function msgDate(iso: string): string {
+  const d = new Date(iso);
+  if (isToday(d)) return "today";
+  if (isYesterday(d)) return "yesterday";
+  return format(d, "dd/MM/yyyy");
+}
 
 export function ChatView({ conversation }: { conversation: Conversation }) {
-  const groups = conversation.messages.reduce<Record<string, typeof conversation.messages>>(
+  const [messages, setMessages] = useState<Message[]>(conversation.messages);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`messages:${conversation.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversation.id}`,
+        },
+        (payload) => {
+          const m = payload.new as {
+            id: string;
+            sender: string;
+            content: string;
+            sent_at: string;
+          };
+          const newMsg: Message = {
+            from: m.sender === "agent" ? "agent" : "lead",
+            text: m.content,
+            time: format(new Date(m.sent_at), "HH:mm"),
+            date: msgDate(m.sent_at),
+          };
+          setMessages((prev) => [...prev, newMsg]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversation.id]);
+
+  const groups = messages.reduce<Record<string, Message[]>>(
     (acc, m) => {
       (acc[m.date] = acc[m.date] || []).push(m);
       return acc;
@@ -52,11 +105,12 @@ export function ChatView({ conversation }: { conversation: Conversation }) {
             ))}
           </div>
         ))}
-        {conversation.messages.length === 0 && (
+        {messages.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-text-3">Sin mensajes</p>
           </div>
         )}
+        <div ref={bottomRef} />
       </div>
 
       {/* Footer */}
