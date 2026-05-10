@@ -15,9 +15,21 @@ export async function GET(request: NextRequest) {
   return new NextResponse('Forbidden', { status: 403 })
 }
 
+interface WaMessage {
+  from: string
+  type: string
+  text?: { body: string }
+  timestamp: string
+}
+
+interface WaContact {
+  wa_id: string
+  profile?: { name: string }
+}
+
 // POST — Meta envía los mensajes entrantes
 export async function POST(request: NextRequest) {
-  let body: any
+  let body: Record<string, unknown>
   try {
     body = await request.json()
   } catch {
@@ -30,13 +42,13 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient()
 
-  for (const entry of body.entry ?? []) {
-    for (const change of entry.changes ?? []) {
+  for (const entry of (body.entry as Record<string, unknown>[]) ?? []) {
+    for (const change of (entry.changes as Record<string, unknown>[]) ?? []) {
       if (change.field !== 'messages') continue
 
-      const value = change.value
-      const incomingMsgs: any[] = value.messages ?? []
-      const contacts: any[] = value.contacts ?? []
+      const value = change.value as Record<string, unknown>
+      const incomingMsgs = (value.messages as WaMessage[]) ?? []
+      const contacts = (value.contacts as WaContact[]) ?? []
 
       for (const msg of incomingMsgs) {
         // Solo procesamos mensajes de texto por ahora
