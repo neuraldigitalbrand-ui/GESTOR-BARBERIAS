@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConversationItem } from "@/components/conversaciones/conversation-item";
 import { PlatformChip } from "@/components/conversaciones/platform-chip";
+import { deleteConversation } from "@/lib/actions/conversations";
 import type { Conversation, Platform } from "@/lib/types";
 
 const ALL_PLATFORMS: (Platform | "all")[] = [
@@ -19,9 +20,15 @@ interface ConversacionesClientProps {
   conversations: Conversation[];
 }
 
-export function ConversacionesClient({ conversations }: ConversacionesClientProps) {
+export function ConversacionesClient({ conversations: initial }: ConversacionesClientProps) {
   const router = useRouter();
+  const [conversations, setConversations] = useState(initial);
   const [activePlatform, setActivePlatform] = useState<Platform | "all">("all");
+
+  async function handleDelete(id: string) {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    await deleteConversation(id);
+  }
 
   const counts: Record<Platform | "all", number> = {
     all: conversations.length,
@@ -39,7 +46,6 @@ export function ConversacionesClient({ conversations }: ConversacionesClientProp
 
   return (
     <div>
-      {/* Platform filter chips */}
       <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 mb-4">
         {ALL_PLATFORMS.filter((p) => p === "all" || counts[p] > 0).map((p) => (
           <PlatformChip
@@ -52,7 +58,6 @@ export function ConversacionesClient({ conversations }: ConversacionesClientProp
         ))}
       </div>
 
-      {/* Conversation list */}
       {filtered.length === 0 ? (
         <div className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.08] p-12">
           <p className="text-sm text-text-3">No hay conversaciones</p>
@@ -65,6 +70,7 @@ export function ConversacionesClient({ conversations }: ConversacionesClientProp
               conv={conv}
               active={false}
               onClick={() => router.push(`/conversaciones/${conv.id}`)}
+              onDelete={handleDelete}
             />
           ))}
         </div>

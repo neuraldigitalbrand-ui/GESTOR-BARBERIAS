@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Anthropic from '@anthropic-ai/sdk'
 
 // GET — Meta verifica que el webhook existe
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: 'ignored' })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   for (const entry of (body.entry as Record<string, unknown>[]) ?? []) {
     for (const change of (entry.changes as Record<string, unknown>[]) ?? []) {
