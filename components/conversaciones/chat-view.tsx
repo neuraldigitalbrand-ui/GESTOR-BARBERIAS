@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Bot, Lock, MoreHorizontal, Phone } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { PlatformIcon, platformLabel } from "@/components/shared/platform-icon";
@@ -19,14 +19,46 @@ function msgDate(iso: string): string {
 export function ChatView({ conversation }: { conversation: Conversation }) {
   const [messages, setMessages] = useState<Message[]>(conversation.messages);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastCountRef = useRef(conversation.messages.length);
+
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
+  // Polling cada 3 segundos para asegurar actualizaciones en tiempo real
   useEffect(() => {
     const supabase = createClient();
 
+    async function fetchMessages() {
+      const { data } = await supabase
+        .from("messages")
+        .select("id, sender, content, sent_at")
+        .eq("conversation_id", conversation.id)
+        .order("sent_at", { ascending: true });
+
+      if (!data) return;
+
+      const fetched: Message[] = data.map((m) => ({
+        from: m.sender === "agent" ? "agent" : "lead",
+        text: m.content,
+        time: format(new Date(m.sent_at), "HH:mm"),
+        date: msgDate(m.sent_at),
+      }));
+
+      if (fetched.length !== lastCountRef.current) {
+        lastCountRef.current = fetched.length;
+        setMessages(fetched);
+      }
+    }
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+
+    // Realtime como capa adicional (si RLS lo permite)
     const channel = supabase
       .channel(`messages:${conversation.id}`)
       .on(
@@ -50,12 +82,16 @@ export function ChatView({ conversation }: { conversation: Conversation }) {
             time: format(new Date(m.sent_at), "HH:mm"),
             date: msgDate(m.sent_at),
           };
-          setMessages((prev) => [...prev, newMsg]);
+          setMessages((prev) => {
+            lastCountRef.current = prev.length + 1;
+            return [...prev, newMsg];
+          });
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [conversation.id]);

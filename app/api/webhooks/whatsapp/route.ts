@@ -159,45 +159,61 @@ export async function POST(request: NextRequest) {
           sent_at: timestamp,
         })
 
-        // 4. Agente IA — solo si está activo y hay API key
-        const { data: agentConfig } = await supabase
-          .from('ai_agent_config')
-          .select('system_prompt, is_active, greeting')
-          .eq('is_active', true)
-          .maybeSingle()
+        // 4. Agente IA
+        try {
+          const { data: agentConfig, error: agentErr } = await supabase
+            .from('ai_agent_config')
+            .select('system_prompt, is_active, greeting')
+            .eq('is_active', true)
+            .maybeSingle()
 
-        if (!agentConfig?.system_prompt) continue
+          console.log('[AI] agentConfig:', agentConfig, 'error:', agentErr)
 
-        // Historial de los últimos 10 mensajes para contexto
-        const { data: recentMsgs } = await supabase
-          .from('messages')
-          .select('sender, content')
-          .eq('conversation_id', conv.id)
-          .order('sent_at', { ascending: false })
-          .limit(10)
+          if (!agentConfig?.system_prompt) {
+            console.log('[AI] Sin config activa, skipping')
+            continue
+          }
 
-        const history = (recentMsgs ?? [])
-          .reverse()
-          .map((m) => ({
-            role: (m.sender === 'agent' ? 'assistant' : 'user') as 'user' | 'assistant',
-            content: m.content,
-          }))
+          if (!process.env.ANTHROPIC_API_KEY) {
+            console.log('[AI] ANTHROPIC_API_KEY no definida')
+            continue
+          }
 
-        const reply = await generateAIReply(agentConfig.system_prompt as string, history)
-        if (!reply) continue
+          const { data: recentMsgs } = await supabase
+            .from('messages')
+            .select('sender, content')
+            .eq('conversation_id', conv.id)
+            .order('sent_at', { ascending: false })
+            .limit(10)
 
-        const replyTimestamp = new Date().toISOString()
+          const history = (recentMsgs ?? [])
+            .reverse()
+            .map((m) => ({
+              role: (m.sender === 'agent' ? 'assistant' : 'user') as 'user' | 'assistant',
+              content: m.content,
+            }))
 
-        // Guardar respuesta del agente
-        await supabase.from('messages').insert({
-          conversation_id: conv.id,
-          content: reply,
-          sender: 'agent',
-          sent_at: replyTimestamp,
-        })
+          console.log('[AI] Llamando a Claude con', history.length, 'mensajes de historial')
 
-        // Enviar por WhatsApp
-        await sendWhatsAppMessage(waId, reply)
+          const reply = await generateAIReply(agentConfig.system_prompt as string, history)
+          console.log('[AI] Respuesta Claude:', reply)
+
+          if (!reply) continue
+
+          const replyTimestamp = new Date().toISOString()
+
+          await supabase.from('messages').insert({
+            conversation_id: conv.id,
+            content: reply,
+            sender: 'agent',
+            sent_at: replyTimestamp,
+          })
+
+          await sendWhatsAppMessage(waId, reply)
+          console.log('[AI] Respuesta enviada a', waId)
+        } catch (err) {
+          console.error('[AI] Error en agente:', err)
+        }
       }
     }
   }
