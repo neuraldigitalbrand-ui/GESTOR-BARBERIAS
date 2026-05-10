@@ -165,6 +165,8 @@ export async function POST(request: NextRequest) {
             .from('ai_agent_config')
             .select('system_prompt, is_active, greeting')
             .eq('is_active', true)
+            .order('updated_at', { ascending: false })
+            .limit(1)
             .maybeSingle()
 
           console.log('[AI] agentConfig:', agentConfig, 'error:', agentErr)
