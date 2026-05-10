@@ -31,7 +31,7 @@ interface WaContact {
 
 async function sendWhatsAppMessage(to: string, text: string) {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID
-  const token = process.env.WHATSAPP_ACCESS_TOKEN
+  const token = process.env.WHATSAPP_ACCESS_TOKEN?.replace(/\s+/g, '')
   if (!phoneId || !token) return
 
   await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
