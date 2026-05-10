@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Groq from 'groq-sdk'
+// v2
 
 // GET — Meta verifica que el webhook existe
 export async function GET(request: NextRequest) {
