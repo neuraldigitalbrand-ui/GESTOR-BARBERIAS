@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
           .eq('is_active', true)
           .maybeSingle()
 
-        if (!agentConfig) continue
+        if (!agentConfig?.system_prompt) continue
 
         // Historial de los últimos 10 mensajes para contexto
         const { data: recentMsgs } = await supabase
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
             content: m.content,
           }))
 
-        const reply = await generateAIReply(agentConfig.system_prompt, history)
+        const reply = await generateAIReply(agentConfig.system_prompt as string, history)
         if (!reply) continue
 
         const replyTimestamp = new Date().toISOString()
