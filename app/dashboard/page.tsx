@@ -226,7 +226,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RevenueCard revenue={weekRevenue} weekBars={weekBars} />
-        <div className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <TopServices services={topServices} />
           {nextAppointment ? (
             <NextAppointmentCard
