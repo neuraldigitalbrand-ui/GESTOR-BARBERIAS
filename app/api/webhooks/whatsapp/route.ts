@@ -238,6 +238,70 @@ export async function POST(request: NextRequest) {
             sent_at: replyTimestamp,
           })
 
+          // Detectar confirmación de turno y crear appointment
+          if (/turno confirmado|confirmado/i.test(reply)) {
+            try {
+              // Buscar el servicio más mencionado en la conversación
+              const { data: allMsgs } = await supabase
+                .from('messages')
+                .select('content')
+                .eq('conversation_id', conv.id)
+                .order('sent_at', { ascending: true })
+
+              const convText = (allMsgs ?? []).map(m => m.content).join(' ').toLowerCase()
+
+              const { data: services } = await supabase
+                .from('services')
+                .select('id, name, duration_minutes')
+
+              let matchedService = services?.[0]
+              for (const svc of services ?? []) {
+                if (convText.includes(svc.name.toLowerCase())) {
+                  matchedService = svc
+                  break
+                }
+              }
+
+              if (matchedService && lead) {
+                // Detectar hora mencionada (ej: "14:00", "las 14", "14hs")
+                const timeMatch = convText.match(/(\d{1,2})[:\s]?(\d{0,2})\s*(?:hs|horas?|:00)?/)
+                const hour = timeMatch ? parseInt(timeMatch[1]) : 10
+                const validHour = hour >= 8 && hour <= 20 ? hour : 10
+
+                // Detectar día (mañana o hoy)
+                const isTomorrow = /mañana/i.test(convText)
+                const aptDate = new Date()
+                if (isTomorrow) aptDate.setDate(aptDate.getDate() + 1)
+                aptDate.setHours(validHour, 0, 0, 0)
+
+                const endDate = new Date(aptDate)
+                endDate.setMinutes(endDate.getMinutes() + (matchedService.duration_minutes ?? 30))
+
+                // Solo crear si no existe ya uno para este lead en esa fecha
+                const { data: existing } = await supabase
+                  .from('appointments')
+                  .select('id')
+                  .eq('lead_id', lead.id)
+                  .eq('status', 'confirmed')
+                  .gte('start_at', aptDate.toISOString().split('T')[0])
+                  .maybeSingle()
+
+                if (!existing) {
+                  await supabase.from('appointments').insert({
+                    lead_id: lead.id,
+                    service_id: matchedService.id,
+                    start_at: aptDate.toISOString(),
+                    end_at: endDate.toISOString(),
+                    status: 'confirmed',
+                  })
+                  console.log('[BOOKING] Turno creado para', name, 'a las', validHour)
+                }
+              }
+            } catch (bookingErr) {
+              console.error('[BOOKING] Error creando turno:', bookingErr)
+            }
+          }
+
           await sendWhatsAppMessage(waId, reply)
 
         } catch (err) {
