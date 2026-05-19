@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Groq from 'groq-sdk'
-// v2
 
 // GET — Meta verifica que el webhook existe
 export async function GET(request: NextRequest) {
@@ -29,24 +28,43 @@ interface WaContact {
   profile?: { name: string }
 }
 
-async function sendWhatsAppMessage(to: string, text: string) {
+async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID
   const token = process.env.WHATSAPP_ACCESS_TOKEN?.replace(/\s+/g, '')
-  if (!phoneId || !token) return
 
-  await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: text },
-    }),
+  if (!phoneId || !token) {
+    console.error('[WA] WHATSAPP_PHONE_NUMBER_ID o WHATSAPP_ACCESS_TOKEN no definidos')
+    return
+  }
+
+  const url = `https://graph.facebook.com/v20.0/${phoneId}/messages`
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: text },
   })
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body,
+    })
+
+    const json = await res.json()
+
+    if (!res.ok) {
+      console.error('[WA] Error al enviar mensaje:', res.status, JSON.stringify(json))
+    } else {
+      console.log('[WA] Mensaje enviado a', to, '- ID:', json?.messages?.[0]?.id)
+    }
+  } catch (err) {
+    console.error('[WA] Fetch error:', err)
+  }
 }
 
 async function generateAIReply(
@@ -54,9 +72,11 @@ async function generateAIReply(
   history: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<string | null> {
   const apiKey = process.env.GROQ_API_KEY
-  if (!apiKey) return null
+  if (!apiKey) {
+    console.error('[AI] GROQ_API_KEY no definida')
+    return null
+  }
 
-  // Filtrar mensajes vacíos y asegurar que empiece con "user"
   const clean = history.filter((m) => m.content && m.content.trim().length > 0)
   const firstUser = clean.findIndex((m) => m.role === 'user')
   const messages = firstUser >= 0 ? clean.slice(firstUser) : clean
@@ -109,6 +129,8 @@ export async function POST(request: NextRequest) {
 
         const contact = contacts.find((c) => c.wa_id === waId)
         const name: string = contact?.profile?.name ?? `WhatsApp ${waId}`
+
+        console.log(`[WH] Mensaje de ${name} (${waId}): "${text}"`)
 
         // 1. Buscar o crear lead
         let { data: lead } = await supabase
@@ -171,23 +193,16 @@ export async function POST(request: NextRequest) {
 
         // 4. Agente IA
         try {
-          const { data: agentConfig, error: agentErr } = await supabase
+          const { data: agentConfig } = await supabase
             .from('ai_agent_config')
-            .select('system_prompt, is_active, greeting')
+            .select('system_prompt, is_active')
             .eq('is_active', true)
             .order('updated_at', { ascending: false })
             .limit(1)
             .maybeSingle()
 
-          console.log('[AI] agentConfig:', agentConfig, 'error:', agentErr)
-
           if (!agentConfig?.system_prompt) {
-            console.log('[AI] Sin config activa, skipping')
-            continue
-          }
-
-          if (!process.env.GROQ_API_KEY) {
-            console.log('[AI] GROQ_API_KEY no definida')
+            console.log('[AI] Sin config activa — no responde')
             continue
           }
 
@@ -205,12 +220,14 @@ export async function POST(request: NextRequest) {
               content: m.content,
             }))
 
-          console.log('[AI] Llamando a Claude con', history.length, 'mensajes de historial')
-
           const reply = await generateAIReply(agentConfig.system_prompt as string, history)
-          console.log('[AI] Respuesta Claude:', reply)
 
-          if (!reply) continue
+          if (!reply) {
+            console.log('[AI] Sin respuesta generada')
+            continue
+          }
+
+          console.log('[AI] Respuesta:', reply.slice(0, 80))
 
           const replyTimestamp = new Date().toISOString()
 
@@ -222,7 +239,7 @@ export async function POST(request: NextRequest) {
           })
 
           await sendWhatsAppMessage(waId, reply)
-          console.log('[AI] Respuesta enviada a', waId)
+
         } catch (err) {
           console.error('[AI] Error en agente:', err)
         }

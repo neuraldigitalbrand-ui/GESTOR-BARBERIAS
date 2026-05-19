@@ -29,7 +29,6 @@ export function ChatView({ conversation }: { conversation: Conversation }) {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Polling cada 3 segundos para asegurar actualizaciones en tiempo real
   useEffect(() => {
     const supabase = createClient();
 
@@ -40,7 +39,7 @@ export function ChatView({ conversation }: { conversation: Conversation }) {
         .eq("conversation_id", conversation.id)
         .order("sent_at", { ascending: true });
 
-      if (!data) return;
+      if (!data || data.length === 0) return; // nunca limpiar mensajes existentes
 
       const fetched: Message[] = data.map((m) => ({
         from: m.sender === "agent" ? "agent" : "lead",
@@ -49,7 +48,12 @@ export function ChatView({ conversation }: { conversation: Conversation }) {
         date: msgDate(m.sent_at),
       }));
 
-      if (fetched.length !== lastCountRef.current) {
+      // Solo actualizar si hay más mensajes que antes
+      if (fetched.length > lastCountRef.current) {
+        lastCountRef.current = fetched.length;
+        setMessages(fetched);
+      } else if (lastCountRef.current === 0 && fetched.length > 0) {
+        // Caso inicial: server no trajo mensajes pero client sí
         lastCountRef.current = fetched.length;
         setMessages(fetched);
       }
@@ -58,7 +62,7 @@ export function ChatView({ conversation }: { conversation: Conversation }) {
     fetchMessages();
     const interval = setInterval(fetchMessages, 3000);
 
-    // Realtime como capa adicional (si RLS lo permite)
+    // Realtime
     const channel = supabase
       .channel(`messages:${conversation.id}`)
       .on(
