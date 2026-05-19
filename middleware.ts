@@ -2,16 +2,29 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+const DEMO_TOKEN = 'barberos_demo_v1'
+
 export async function middleware(request: NextRequest) {
-  // Las rutas de API manejan su propia auth — no redirigir
+  // Las rutas de API manejan su propia auth
   if (request.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next({ request })
   }
 
+  const isLoginPage = request.nextUrl.pathname === '/login'
+
+  // ─── Demo session ── cookie httpOnly, no expira en 30 días ───
+  const demoCookie = request.cookies.get('barberos_demo')?.value
+  if (demoCookie === DEMO_TOKEN) {
+    if (isLoginPage) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return NextResponse.next({ request })
+  }
+
+  // ─── Auth real via Supabase ───
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  // Si faltan las env vars, dejar pasar (no crashear)
   if (!url || !key) {
     return NextResponse.next({ request })
   }
@@ -38,15 +51,11 @@ export async function middleware(request: NextRequest) {
     const { data } = await supabase.auth.getUser()
     user = data.user
   } catch {
-    // Si falla la llamada a Supabase, redirigir a login
-    const isLoginPage = request.nextUrl.pathname === '/login'
     if (!isLoginPage) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
     return NextResponse.next({ request })
   }
-
-  const isLoginPage = request.nextUrl.pathname === '/login'
 
   if (!user && !isLoginPage) {
     return NextResponse.redirect(new URL('/login', request.url))
