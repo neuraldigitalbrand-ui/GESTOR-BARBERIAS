@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { TopServices } from "@/components/dashboard/top-services";
 import { NextAppointmentCard } from "@/components/dashboard/next-appointment";
+import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { RevenueCard } from "@/components/dashboard/revenue-card";
 import { PageHeader } from "@/components/shared/page-header";
 import {
@@ -11,7 +12,7 @@ import {
   Inbox,
   LayoutDashboard,
 } from "lucide-react";
-import { startOfWeek, addDays, format } from "date-fns";
+import { startOfWeek, addDays, format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
 export default async function DashboardPage() {
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
     allServicesResult,
     topAptsResult,
     nextAptResult,
+    recentConvsResult,
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -80,6 +82,11 @@ export default async function DashboardPage() {
       .order("start_at", { ascending: true })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("conversations")
+      .select("id, platform, last_message_at, unread_count, leads(name)")
+      .order("last_message_at", { ascending: false })
+      .limit(5),
   ]);
 
   const todayCount = todayResult.count ?? 0;
@@ -154,6 +161,31 @@ export default async function DashboardPage() {
     };
   }
 
+  // Recent activity
+  const recentItems = await Promise.all(
+    (recentConvsResult.data ?? []).map(async (c) => {
+      const { data: lastMsg } = await supabase
+        .from("messages")
+        .select("content")
+        .eq("conversation_id", c.id)
+        .order("sent_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lead = Array.isArray(c.leads) ? c.leads[0] : c.leads;
+      const diff = c.last_message_at
+        ? formatDistanceToNow(new Date(c.last_message_at), { locale: es, addSuffix: false })
+        : "";
+      return {
+        id: c.id,
+        name: lead?.name ?? "Cliente",
+        platform: c.platform as import("@/lib/types").Platform,
+        preview: lastMsg?.content ?? "Sin mensajes",
+        time: diff ? `hace ${diff}` : "",
+        unread: c.unread_count ?? 0,
+      };
+    })
+  );
+
   const dateSubtitle = format(now, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
 
   return (
@@ -211,6 +243,7 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
+      <RecentActivity items={recentItems} />
     </div>
   );
 }
