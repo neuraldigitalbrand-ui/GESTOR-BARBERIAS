@@ -14,6 +14,8 @@ interface RevenueCardProps {
 }
 
 export function RevenueCard({ revenue, weekBars }: RevenueCardProps) {
+  const BAR_MAX_PX = 48; // altura máxima de barra en px
+
   return (
     <div className="md:col-span-2 bg-gradient-to-br from-surface to-[#1a1612] rounded-2xl p-7 border border-brand/20 shadow-gold-glow relative overflow-hidden">
       {/* Shine */}
@@ -41,29 +43,37 @@ export function RevenueCard({ revenue, weekBars }: RevenueCardProps) {
         </div>
       </div>
 
-      {/* Daily bars */}
-      <div className="mt-6 flex items-end gap-2 h-14 relative">
-        {weekBars.map((b, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+      {/* Daily bars — altura fija en px para que el porcentaje funcione */}
+      <div className="mt-6 relative">
+        {/* Barra area: altura fija */}
+        <div className="flex items-end gap-2" style={{ height: `${BAR_MAX_PX}px` }}>
+          {weekBars.map((b, i) => (
             <div
-              className={`w-full rounded-sm transition-all ${
+              key={i}
+              className={`flex-1 rounded-sm transition-all duration-500 ${
                 b.future
                   ? "bg-white/[0.05] border border-white/[0.04]"
                   : b.today
                   ? "bg-brand"
                   : "bg-brand/40"
               }`}
-              style={{ height: `${Math.max(b.v * 100, 4)}%` }}
+              style={{ height: `${Math.max(b.v * BAR_MAX_PX, 3)}px` }}
             />
+          ))}
+        </div>
+        {/* Fila de labels separada */}
+        <div className="flex gap-2 mt-2">
+          {weekBars.map((b, i) => (
             <span
-              className={`text-[9px] uppercase tracking-wide ${
-                b.today ? "text-brand" : "text-text-3"
+              key={i}
+              className={`flex-1 text-center text-[9px] uppercase tracking-wide ${
+                b.today ? "text-brand font-semibold" : "text-text-3"
               }`}
             >
               {b.d}
             </span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
