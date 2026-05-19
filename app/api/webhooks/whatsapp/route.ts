@@ -239,51 +239,74 @@ export async function POST(request: NextRequest) {
           })
 
           // Detectar confirmación de turno y crear appointment
-          if (/turno confirmado|confirmado/i.test(reply)) {
+          if (/turno confirmado/i.test(reply)) {
             try {
-              // Buscar el servicio más mencionado en la conversación
-              const { data: allMsgs } = await supabase
-                .from('messages')
-                .select('content')
-                .eq('conversation_id', conv.id)
-                .order('sent_at', { ascending: true })
-
-              const convText = (allMsgs ?? []).map(m => m.content).join(' ').toLowerCase()
-
               const { data: services } = await supabase
                 .from('services')
                 .select('id, name, duration_minutes')
 
+              // 1. Buscar servicio mencionado en el reply del agente
+              const replyLower = reply.toLowerCase()
               let matchedService = services?.[0]
               for (const svc of services ?? []) {
-                if (convText.includes(svc.name.toLowerCase())) {
+                if (replyLower.includes(svc.name.toLowerCase())) {
                   matchedService = svc
                   break
                 }
               }
 
               if (matchedService && lead) {
-                // Detectar hora mencionada (ej: "14:00", "las 14", "14hs")
-                const timeMatch = convText.match(/(\d{1,2})[:\s]?(\d{0,2})\s*(?:hs|horas?|:00)?/)
+                // 2. Extraer hora: "a las 12hs", "a las 9", "14:30"
+                const timeMatch = reply.match(/a las (\d{1,2})(?::(\d{2}))?/)
                 const hour = timeMatch ? parseInt(timeMatch[1]) : 10
-                const validHour = hour >= 8 && hour <= 20 ? hour : 10
+                const minutes = timeMatch?.[2] ? parseInt(timeMatch[2]) : 0
+                const safeHour = hour >= 7 && hour <= 21 ? hour : 10
 
-                // Detectar día (mañana o hoy)
-                const isTomorrow = /mañana/i.test(convText)
+                // 3. Extraer día: nombre de día o "mañana"
+                const dayMap: Record<string, number> = {
+                  lunes: 1, martes: 2, 'miércoles': 3, miercoles: 3,
+                  jueves: 4, viernes: 5, 'sábado': 6, sabado: 6
+                }
                 const aptDate = new Date()
-                if (isTomorrow) aptDate.setDate(aptDate.getDate() + 1)
-                aptDate.setHours(validHour, 0, 0, 0)
+                let daySet = false
+
+                for (const [dayName, dayNum] of Object.entries(dayMap)) {
+                  if (replyLower.includes(dayName)) {
+                    const today = aptDate.getDay()
+                    let diff = dayNum - today
+                    if (diff < 0) diff += 7
+                    if (diff === 0) diff = 7 // si es hoy, el próximo
+                    aptDate.setDate(aptDate.getDate() + diff)
+                    daySet = true
+                    break
+                  }
+                }
+
+                // Número de día del mes (ej: "martes 19")
+                const dayNumMatch = reply.match(/(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado)\s+(\d{1,2})/i)
+                if (dayNumMatch) {
+                  const dom = parseInt(dayNumMatch[1])
+                  if (dom >= 1 && dom <= 31) aptDate.setDate(dom)
+                }
+
+                if (!daySet && /mañana/i.test(reply)) {
+                  aptDate.setDate(aptDate.getDate() + 1)
+                }
+
+                aptDate.setHours(safeHour, minutes, 0, 0)
 
                 const endDate = new Date(aptDate)
                 endDate.setMinutes(endDate.getMinutes() + (matchedService.duration_minutes ?? 30))
 
-                // Solo crear si no existe ya uno para este lead en esa fecha
+                // Solo crear si no existe ya confirmado para este lead ese día
+                const dayStr = aptDate.toISOString().split('T')[0]
                 const { data: existing } = await supabase
                   .from('appointments')
                   .select('id')
                   .eq('lead_id', lead.id)
                   .eq('status', 'confirmed')
-                  .gte('start_at', aptDate.toISOString().split('T')[0])
+                  .gte('start_at', dayStr + 'T00:00:00')
+                  .lte('start_at', dayStr + 'T23:59:59')
                   .maybeSingle()
 
                 if (!existing) {
@@ -294,7 +317,9 @@ export async function POST(request: NextRequest) {
                     end_at: endDate.toISOString(),
                     status: 'confirmed',
                   })
-                  console.log('[BOOKING] Turno creado para', name, 'a las', validHour)
+                  console.log('[BOOKING] Turno creado:', name, aptDate.toISOString(), matchedService.name)
+                } else {
+                  console.log('[BOOKING] Ya existe turno para', name, 'el', dayStr)
                 }
               }
             } catch (bookingErr) {
