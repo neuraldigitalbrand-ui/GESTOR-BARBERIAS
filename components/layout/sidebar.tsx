@@ -95,6 +95,17 @@ export function Sidebar() {
             </button>
           </form>
         </div>
+        <p className="mt-3 text-center text-[10px] text-text-3">
+          Desarrollado por{" "}
+          <a
+            href="https://www.neuraldigitalbrand.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-brand"
+          >
+            Neural Digital Brand
+          </a>
+        </p>
       </div>
     </aside>
   );
