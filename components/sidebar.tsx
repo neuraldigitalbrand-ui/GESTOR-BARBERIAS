@@ -59,6 +59,17 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t px-5 py-3">
         <p className="text-xs text-muted-foreground">Demo v1.0</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Desarrollado por{" "}
+          <a
+            href="https://www.neuraldigitalbrand.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-primary"
+          >
+            Neural Digital Brand
+          </a>
+        </p>
       </div>
     </aside>
   );
